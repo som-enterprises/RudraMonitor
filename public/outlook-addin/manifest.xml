@@ -19,7 +19,7 @@
            xsi:type="MailApp">
 
   <Id>aff5a964-4e27-45ee-aeff-bbe0772511d5</Id>
-  <Version>1.0.0.360</Version>
+  <Version>1.0.0.367</Version>
   <ProviderName>Wellness Extract</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Wellness Extract Signature" />

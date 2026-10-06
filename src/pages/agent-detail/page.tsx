@@ -49,6 +49,8 @@ export default function AgentDetailPage() {
   const [activeTab, setActiveTab] = useState<DetailTabId>('applications');
   const [range, setRange] = useState<DateRange>('today');
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+  const [screenshotPage, setScreenshotPage] = useState(1);
+  const SCREENSHOTS_PER_PAGE = 32;
   const { agent, activity, alerts, loading, notFound, refresh, beginSaveWindow } = useAgentDetail(agentId, range);
 
   // Live refresh every 30s so SYSTEM ON / IDLE / ACTIVE update without a manual reload.
@@ -56,6 +58,10 @@ export default function AgentDetailPage() {
     const t = setInterval(() => { void refresh(); }, 30_000);
     return () => clearInterval(t);
   }, [refresh]);
+
+  // Changing the date range reshapes the row set; snap back to page 1 so the
+  // user isn't stranded on an index that no longer exists.
+  useEffect(() => { setScreenshotPage(1); }, [range]);
 
   const updateCaptureSettings = async (p: {
     screenshots: boolean;
@@ -442,7 +448,14 @@ export default function AgentDetailPage() {
         })()}
 
         {activeTab === 'screenshots' && (() => {
-          const recent = screenshotRows.slice(-40).reverse();
+          // screenshotRows is DESC-sorted (newest first) by useAgentDetail.
+          // Previously the UI did `.slice(-40).reverse()` which actually
+          // returned the OLDEST 40 of the window — users with a tenant
+          // saw their first-ever screenshots instead of today's.
+          const totalPages = Math.max(1, Math.ceil(screenshotRows.length / SCREENSHOTS_PER_PAGE));
+          const safePage = Math.min(screenshotPage, totalPages);
+          const startIdx = (safePage - 1) * SCREENSHOTS_PER_PAGE;
+          const recent = screenshotRows.slice(startIdx, startIdx + SCREENSHOTS_PER_PAGE);
           return (
             <div className="panel p-4">
               {recent.length === 0 ? (
@@ -483,11 +496,52 @@ export default function AgentDetailPage() {
                         </div>
                         <div className="px-2.5 py-2 flex items-center justify-between">
                           <p className="text-[11px] t2 tnum">{formatTime(r.created_at)}</p>
-                          <span className="text-[10px] t3">#{recent.length - i}</span>
+                          <span className="text-[10px] t3">#{screenshotRows.length - (startIdx + i)}</span>
                         </div>
                       </button>
                     );
                   })}
+                </div>
+              )}
+
+              {screenshotRows.length > SCREENSHOTS_PER_PAGE && (
+                <div className="mt-4 flex items-center justify-between text-[12px]">
+                  <p className="t3 tnum">
+                    Showing {startIdx + 1}–{Math.min(startIdx + SCREENSHOTS_PER_PAGE, screenshotRows.length)} of {screenshotRows.length}
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={safePage <= 1}
+                      onClick={() => setScreenshotPage(1)}
+                      className="px-2 py-1 rounded sunken t2 hover:bg-dark-700/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                      aria-label="First page">
+                      <i className="ri-skip-back-mini-line" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={safePage <= 1}
+                      onClick={() => setScreenshotPage((p) => Math.max(1, p - 1))}
+                      className="px-3 py-1 rounded sunken t2 hover:bg-dark-700/40 disabled:opacity-40 disabled:cursor-not-allowed">
+                      <i className="ri-arrow-left-s-line" /> Prev
+                    </button>
+                    <span className="px-2 t2 tnum">Page {safePage} of {totalPages}</span>
+                    <button
+                      type="button"
+                      disabled={safePage >= totalPages}
+                      onClick={() => setScreenshotPage((p) => Math.min(totalPages, p + 1))}
+                      className="px-3 py-1 rounded sunken t2 hover:bg-dark-700/40 disabled:opacity-40 disabled:cursor-not-allowed">
+                      Next <i className="ri-arrow-right-s-line" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={safePage >= totalPages}
+                      onClick={() => setScreenshotPage(totalPages)}
+                      className="px-2 py-1 rounded sunken t2 hover:bg-dark-700/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                      aria-label="Last page">
+                      <i className="ri-skip-forward-mini-line" />
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -514,7 +568,10 @@ export default function AgentDetailPage() {
                         <p className="text-[12.5px] t1 font-medium">
                           {new Date(cur.created_at).toLocaleString([], { weekday: 'short', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                         </p>
-                        <p className="text-[11px] text-gray-300">Screenshot {lightboxIdx + 1} of {recent.length}</p>
+                        <p className="text-[11px] text-gray-300">
+                          Screenshot {screenshotRows.length - (startIdx + lightboxIdx)} of {screenshotRows.length}
+                          {totalPages > 1 && <> · page {safePage} of {totalPages}</>}
+                        </p>
                       </div>
                       <div className="flex items-center gap-2">
                         {url && (
